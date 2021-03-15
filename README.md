@@ -25,7 +25,7 @@ This setup creates the following resources:
 - EFS storage as shared storage for all ECS tasks(containers)
 - CloudFront Distribution connected to ALB
 
-![Architecture Diagram](/images/Architecture Diagram.jpg)
+![Architecture Diagram](/images/architecture-diagram.png)
 
 ### Get Started building your own infrastructure
 Prerequisite:
