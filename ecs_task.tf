@@ -7,7 +7,7 @@ resource "aws_ecs_task_definition" "main" {
   execution_role_arn       = aws_iam_role.ecs_task_execution_role.arn
   container_definitions = jsonencode([{
     name      = "${local.name}-container-${var.environment}"
-    image     = "${var.container_image}:latest"
+    image     = "${local.account}.dkr.ecr.${var.aws-region}.amazonaws.com/${local.name}:latest"
     essential = true
     portMappings = [{
       protocol      = "tcp"

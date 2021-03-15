@@ -84,7 +84,7 @@ variable "health_check_path" {
   default     = "/health"
 }
 
-variable custom_header {
-  default     = "CustomHeaderString"
+variable "custom_header" {
+  default = "CustomHeaderString"
 }
 

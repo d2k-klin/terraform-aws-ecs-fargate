@@ -16,7 +16,7 @@ module "cdn" {
         origin_ssl_protocols   = ["TLSv1"]
       }
 
-    custom_header = [
+      custom_header = [
         {
           name  = "X-Frame-Options"
           value = var.custom_header
