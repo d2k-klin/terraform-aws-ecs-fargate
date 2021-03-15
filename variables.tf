@@ -56,7 +56,7 @@ variable "service_desired_count" {
 
 variable "container_image" {
   description = "Docker image to be launched"
-  default     = "254038622216.dkr.ecr.eu-central-1.amazonaws.com/noa-dev"
+  default     = "noa-dev"
 }
 
 variable "container_port" {
@@ -81,10 +81,26 @@ variable "container_memory" {
 
 variable "health_check_path" {
   description = "Http path for task health check"
-  default     = "/health"
+  default     = "/ping"
 }
 
 variable "custom_header" {
+  description = "Custom Header to be set in  CloudFront and ALB to limit the ALB access only from CDN"  
   default = "CustomHeaderString"
 }
 
+variable "efs_storage_name" {
+  description = "Name of the EFS storage"  
+  default = "service-storage"
+}
+
+variable "container_mount_path" {
+  description = "Container path to mount EFS"
+  default = "db_folder"
+} 
+
+variable "ecs_task_public_ip" {
+  description = "Bool value to for Assigning Public IP to ECS Task"
+  default = false
+  
+}

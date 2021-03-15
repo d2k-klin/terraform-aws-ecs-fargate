@@ -18,7 +18,7 @@ module "alb_ecs" {
       health_check = {
         enabled             = true
         interval            = 30
-        path                = "/ping"
+        path                = var.health_check_path
         port                = "traffic-port"
         healthy_threshold   = 3
         unhealthy_threshold = 3

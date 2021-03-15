@@ -7,7 +7,7 @@ resource "aws_ecs_task_definition" "main" {
   execution_role_arn       = aws_iam_role.ecs_task_execution_role.arn
   container_definitions = jsonencode([{
     name      = "${local.name}-container-${var.environment}"
-    image     = "${local.account}.dkr.ecr.${var.aws-region}.amazonaws.com/${local.name}:latest"
+    image     = "${local.account}.dkr.ecr.${var.aws-region}.amazonaws.com/${var.container_image}:latest"
     essential = true
     portMappings = [{
       protocol      = "tcp"
@@ -16,8 +16,8 @@ resource "aws_ecs_task_definition" "main" {
     }]
     mountPoints : [
       {
-        sourceVolume : "service-storage"
-        containerPath : "db_folder"
+        sourceVolume : var.efs_storage_name
+        containerPath : var.container_mount_path
       }
     ],
     logConfiguration = {
@@ -30,7 +30,7 @@ resource "aws_ecs_task_definition" "main" {
     }
   }])
   volume {
-    name = "service-storage"
+    name = var.efs_storage_name
 
     efs_volume_configuration {
       file_system_id = aws_efs_file_system.this.id
