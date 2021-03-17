@@ -21,6 +21,7 @@ This setup creates the following resources:
 - An ECR for the docker images
 - An ECS cluster with a service (incl. auto scaling policies for CPU, memory usage and number of ALB requests)
   and task definition to run docker containers from the ECR (incl. IAM execution role)
+   - Each new ECS Service/Task should be created as separte module and then referenced in main.tf
 - Optional RDS module + security group the allows access only form ECS securutiy_group
 - EFS storage as shared storage for all ECS tasks(containers)
 - CloudFront Distribution connected to ALB
