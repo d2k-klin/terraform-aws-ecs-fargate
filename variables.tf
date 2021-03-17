@@ -49,34 +49,9 @@ variable "create_cdn" {
   default     = true
 }
 
-variable "service_desired_count" {
-  description = "Number of tasks running in parallel"
-  default     = 2
-}
-
 variable "container_image" {
   description = "Docker image to be launched"
   default     = "noa-dev"
-}
-
-variable "container_port" {
-  description = "The port where the Docker is exposed"
-  default     = 5000
-}
-
-variable "container_log_level" {
-  description = "The container log level"
-  default     = "DEBUG"
-}
-
-variable "container_cpu" {
-  description = "The number of cpu units used by the task"
-  default     = 256
-}
-
-variable "container_memory" {
-  description = "The amount (in MiB) of memory used by the task"
-  default     = 512
 }
 
 variable "health_check_path" {
@@ -85,22 +60,6 @@ variable "health_check_path" {
 }
 
 variable "custom_header" {
-  description = "Custom Header to be set in  CloudFront and ALB to limit the ALB access only from CDN"  
-  default = "CustomHeaderString"
-}
-
-variable "efs_storage_name" {
-  description = "Name of the EFS storage"  
-  default = "service-storage"
-}
-
-variable "container_mount_path" {
-  description = "Container path to mount EFS"
-  default = "db_folder"
-} 
-
-variable "ecs_task_public_ip" {
-  description = "Bool value to for Assigning Public IP to ECS Task"
-  default = false
-  
+  description = "Custom Header to be set in  CloudFront and ALB to limit the ALB access only from CDN"
+  default     = "CustomHeaderString"
 }
