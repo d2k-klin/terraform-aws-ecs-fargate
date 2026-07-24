@@ -1,179 +1,231 @@
-# terraform-aws-ecs-fargate
+# AWS ECS Fargate Terraform starter
 
-A ready-to-fork Terraform starter for running a containerized app on **AWS ECS
-Fargate**, fronted by an **Application Load Balancer** and (optionally)
-**CloudFront**, with **ECR** for images, **EFS** for shared storage, and an
-**optional RDS PostgreSQL** database.
+A ready-to-fork Terraform stack for deploying a containerized web application
+to AWS ECS Fargate. The defaults discover Availability Zones in your selected
+region and launch a working nginx container, so you can verify the platform
+before publishing your own image.
 
-It's meant as a **jump start for small projects**: clone it, point it at your
-container image, `terraform apply`, and you have a scalable, load-balanced
-service running on serverless containers. Everything is wired together with
-sensible defaults and the official
-[terraform-aws-modules](https://github.com/terraform-aws-modules), so you can
-grow into it rather than out of it.
+![Architecture diagram](images/architecture-diagram.png)
 
-![Architecture Diagram](/images/architecture-diagram.png)
+## What this starter creates
 
-## What it creates
+- A VPC across two or more automatically discovered Availability Zones
+- Public subnets for an Application Load Balancer
+- Private subnets for ECS tasks and database subnets for optional RDS
+- One cost-saving NAT Gateway by default, or one per AZ for production
+- An ECS Fargate cluster, service, task definition, rolling deployments, and
+  CPU/memory autoscaling
+- An ECR repository with immutable tags, push scanning, and lifecycle cleanup
+- CloudWatch container logs with configurable retention
+- Least-privilege network paths between the ALB, ECS, optional EFS, and optional
+  PostgreSQL
+- Optional CloudFront, encrypted EFS, and RDS PostgreSQL
 
-- **VPC** — 3 public + 3 private + 3 database subnets across 3 AZs, an Internet
-  Gateway, and a single NAT Gateway (cheapest option for a small project).
-- **Security groups** — least-privilege: public HTTP on the ALB, container port
-  reachable only from the ALB, EFS/RDS reachable only from the ECS tasks.
-- **Application Load Balancer** — HTTP listener on `:80`, plus a secondary
-  listener on `:8080` for blue/green deployments via CodeDeploy.
-- **ECR repository** — with a lifecycle policy that keeps the last 10 images.
-- **ECS cluster (Fargate)** — Container Insights on, FARGATE + FARGATE_SPOT
-  capacity providers (SPOT-first to save money).
-- **ECS service + task** — defined in the reusable `modules/ecs-noa` module,
-  including CPU / memory / ALB-request autoscaling and the task execution IAM
-  role. Add more services by copying this module and referencing it in
-  `main.tf`.
-- **EFS** — shared file system mounted into every task.
-- **CloudFront** *(optional)* — CDN in front of the ALB, locked to it via a
-  custom header.
-- **RDS PostgreSQL** *(optional)* — with the master password managed in AWS
-  Secrets Manager.
+The starter intentionally does not create DNS records, an ACM certificate, CI/CD,
+or application-specific IAM permissions. Those choices depend on your domain,
+deployment platform, and application.
 
 ## Requirements
 
-| Tool | Version |
-|------|---------|
-| [Terraform](https://developer.hashicorp.com/terraform/downloads) | >= 1.5 (>= 1.11 for S3 native state locking) |
-| [AWS CLI](https://docs.aws.amazon.com/cli/latest/userguide/getting-started-install.html) | v2 |
-| AWS provider | ~> 6.0 (pinned in `versions.tf`) |
-| An AWS account | with credentials configured (`aws configure`) |
+| Requirement | Supported version or notes |
+|---|---|
+| Terraform | `>= 1.11.1, < 2.0.0` |
+| AWS CLI | v2 |
+| Docker | Required only to build and push your own image |
+| AWS account | Credentials with permission to create the resources above |
 
-## Module versions
+The configuration uses AWS provider `>= 6.46, < 7.0`. The committed lock file
+currently selects `6.56.0`.
 
-All community modules are pinned in the `.tf` files:
+### Pinned module versions
+
+These were the latest releases in the Terraform Registry on 24 July 2026:
 
 | Module | Version |
-|--------|---------|
-| terraform-aws-modules/vpc/aws | ~> 6.0 |
-| terraform-aws-modules/alb/aws | ~> 10.0 |
-| terraform-aws-modules/ecs/aws (cluster) | ~> 7.0 |
-| terraform-aws-modules/rds/aws | ~> 7.0 |
-| terraform-aws-modules/cloudfront/aws | ~> 6.0 |
-| terraform-aws-modules/security-group/aws | ~> 6.0 |
+|---|---:|
+| [`terraform-aws-modules/vpc/aws`](https://registry.terraform.io/modules/terraform-aws-modules/vpc/aws/latest) | `6.6.1` |
+| [`terraform-aws-modules/alb/aws`](https://registry.terraform.io/modules/terraform-aws-modules/alb/aws/latest) | `10.5.0` |
+| [`terraform-aws-modules/ecs/aws`](https://registry.terraform.io/modules/terraform-aws-modules/ecs/aws/latest) (cluster + service) | `7.5.0` |
+| [`terraform-aws-modules/rds/aws`](https://registry.terraform.io/modules/terraform-aws-modules/rds/aws/latest) | `7.2.0` |
+| [`terraform-aws-modules/cloudfront/aws`](https://registry.terraform.io/modules/terraform-aws-modules/cloudfront/aws/latest) | `6.7.0` |
+| [`terraform-aws-modules/security-group/aws`](https://registry.terraform.io/modules/terraform-aws-modules/security-group/aws/latest) | `6.0.0` |
 
-## Quick start
+Modules are pinned because Terraform does not record module selections in the
+provider lock file. Dependabot proposes updates for review.
+
+### Reuse decisions
+
+The repository uses official modules where they remove substantial infrastructure
+code, and keeps direct resources where a module would add more surface area than
+value:
+
+| Capability | Decision |
+|---|---|
+| VPC, ALB, ECS cluster/service, RDS, CloudFront, security groups | Reuse the pinned `terraform-aws-modules` implementation |
+| ECR repository | Keep two direct resources; consider [`ecr/aws` `3.2.0`](https://registry.terraform.io/modules/terraform-aws-modules/ecr/aws/latest) for cross-account policies, enhanced scanning, pull-through cache, or replication |
+| EFS file system | Keep the small opt-in setup; consider [`efs/aws` `2.2.0`](https://registry.terraform.io/modules/terraform-aws-modules/efs/aws/latest) for access points, lifecycle policies, replication, or file-system policies |
+| CloudWatch log group | Let the official ECS service module manage it with the container definition |
+| ACM and Route53 | Keep external because domain ownership and DNS delegation are organization-specific |
+| Remote-state S3 bucket | Bootstrap separately; a backend cannot safely create the bucket that stores its own state |
+
+The official ECS service module replaced the repository's local ECS module. It
+now owns the service, task definition, autoscaling, logging, and task/execution
+IAM roles.
+
+## Start a new project
+
+Use the repository as a GitHub template so your project gets a clean history
+and its own remote:
+
+1. Select **Use this template** on GitHub.
+2. Create a repository in your account or organization.
+3. Clone that new repository.
+
+Or use the GitHub CLI:
 
 ```bash
-# 1. Clone
-git clone https://github.com/<you>/terraform-aws-ecs-fargate.git
-cd terraform-aws-ecs-fargate
+gh repo create my-project-infrastructure \
+  --template d2k-klin/terraform-aws-ecs-fargate \
+  --clone
+cd my-project-infrastructure
 
-# 2. Configure AWS credentials (if you haven't already)
-aws configure
+cp example.tfvars terraform.tfvars
+# Edit name, aws_region, and tags in terraform.tfvars.
 
-# 3. Initialize (uses local state until you configure a remote backend)
+aws sts get-caller-identity
 terraform init
-
-# 4. Review the plan
+terraform fmt -check -recursive
+terraform validate
 terraform plan -out=out.plan
+terraform apply out.plan
 
-# 5. Apply
+terraform output -raw application_url
+```
+
+Clone this repository directly only when contributing changes back to the
+starter itself.
+
+The first apply runs `public.ecr.aws/docker/library/nginx:alpine` on port `80`
+with `/` as its health check. This avoids the ECR bootstrap problem: the
+repository must exist before you can push your application image.
+
+## Deploy your application
+
+After the first apply:
+
+```bash
+AWS_REGION="eu-west-1" # Must match aws_region in terraform.tfvars.
+ECR_URL="$(terraform output -raw ecr_repository_url)"
+ECR_REGISTRY="${ECR_URL%/*}"
+IMAGE_TAG="v1"
+
+aws ecr get-login-password --region "$AWS_REGION" \
+  | docker login --username AWS --password-stdin "$ECR_REGISTRY"
+
+docker build -t "$ECR_URL:$IMAGE_TAG" .
+docker push "$ECR_URL:$IMAGE_TAG"
+```
+
+Set the complete image URL and your application's port and health path:
+
+```hcl
+container_image   = "<AWS_ACCOUNT_ID>.dkr.ecr.eu-west-1.amazonaws.com/myapp-dev:v1"
+container_port    = 3000
+health_check_path = "/health"
+```
+
+Then deploy the new task definition:
+
+```bash
+terraform plan -out=out.plan
 terraform apply out.plan
 ```
 
-Terraform runs against the region in `var.aws-region` (default
-`eu-central-1`). Override any variable on the CLI (`-var`), in a
-`terraform.tfvars` file, or via `TF_VAR_*` environment variables.
+ECR tags are immutable. Use a unique tag such as a Git commit SHA for every
+release instead of reusing `latest`.
 
-### Deploy your image
+## Common settings
 
-ECS pulls from the ECR repository this stack creates. Build and push your
-container, then re-apply (or let your CI redeploy the service):
+| Variable | Default | Purpose |
+|---|---|---|
+| `name` | `app` | Short project name |
+| `environment` | `dev` | Environment label |
+| `aws_region` | `us-east-1` | AWS deployment region |
+| `availability_zone_count` | `2` | Number of automatically selected AZs |
+| `single_nat_gateway` | `true` | Lower cost; set `false` for AZ resilience |
+| `container_image` | public nginx | Complete image reference |
+| `container_port` | `80` | Application listener port |
+| `service_desired_count` | `1` | Initial number of tasks |
+| `use_fargate_spot` | `true` | Lower cost, but tasks may be interrupted |
+| `create_cdn` | `false` | Add CloudFront with HTTPS for viewers |
+| `create_efs` | `false` | Add shared persistent storage |
+| `create_postgresql` | `false` | Add RDS PostgreSQL |
+| `certificate_arn` | `null` | Enable HTTPS directly on the ALB |
+| `tags` | `{}` | Organization, owner, and cost-allocation tags |
 
-```bash
-ACCOUNT_ID=$(aws sts get-caller-identity --query Account --output text)
-REGION=eu-central-1
-REPO=noa-dev            # matches var.name-var.environment
+See [variables.tf](variables.tf) for every input and validation rule.
 
-aws ecr get-login-password --region $REGION \
-  | docker login --username AWS --password-stdin $ACCOUNT_ID.dkr.ecr.$REGION.amazonaws.com
+## Cost and production defaults
 
-docker build -t $REPO .
-docker tag  $REPO:latest $ACCOUNT_ID.dkr.ecr.$REGION.amazonaws.com/$REPO:latest
-docker push $ACCOUNT_ID.dkr.ecr.$REGION.amazonaws.com/$REPO:latest
-```
+This repository starts in a cost-conscious development mode. NAT Gateway, ALB,
+Fargate, CloudFront, EFS, RDS, data transfer, and logs can all incur charges.
+Run `terraform destroy` when an experiment is finished.
 
-Your app must listen on `var.container_port` (default `5000`) and answer the
-health check at `var.health_check_path` (default `/ping`).
-
-## Key variables
-
-Full list in [`variables.tf`](variables.tf). The ones you'll most likely change:
-
-| Variable | Default | Description |
-|----------|---------|-------------|
-| `name` / `environment` | `noa` / `dev` | Name prefix for all resources |
-| `aws-region` | `eu-central-1` | Region to deploy into |
-| `cidr` | `10.1.0.0/16` | VPC CIDR |
-| `container_image` | `noa-dev` | ECR image tag ECS runs |
-| `container_port` | `5000` | Port your container listens on |
-| `health_check_path` | `/ping` | ALB health check path |
-| `create_cdn` | `true` | Create the CloudFront distribution |
-| `create_postgresql` | `false` | Create the RDS PostgreSQL instance |
-| `db_name` / `db_username` | `appdb` / `app_user` | RDS DB name and master user (password is auto-managed in Secrets Manager) |
-
-> **Heads up:** CloudFront geo-restriction defaults to whitelisting `DE` only
-> (see `cloudfront.tf`). Change `locations` for your audience.
-
-## Remote state backend
-
-Local state is fine for trying things out, but for real use store state in S3.
-`backend.tf` ships commented out with placeholder values — create a bucket,
-fill it in, uncomment, and re-run `terraform init`.
-
-<details>
-<summary>Create an S3 state bucket</summary>
-
-```bash
-REGION=eu-central-1
-BUCKET=my-terraform-state-$(aws sts get-caller-identity --query Account --output text)
-
-aws s3api create-bucket --bucket "$BUCKET" --region "$REGION" \
-  --create-bucket-configuration LocationConstraint="$REGION"
-
-aws s3api put-bucket-versioning --bucket "$BUCKET" \
-  --versioning-configuration Status=Enabled
-
-aws s3api put-bucket-encryption --bucket "$BUCKET" \
-  --server-side-encryption-configuration \
-  '{"Rules":[{"ApplyServerSideEncryptionByDefault":{"SSEAlgorithm":"AES256"}}]}'
-```
-
-Then set `bucket = "<BUCKET>"` in `backend.tf` and `terraform init` (it will
-offer to migrate local state). `use_lockfile = true` uses S3-native state
-locking, so no DynamoDB table is needed (Terraform >= 1.11).
-</details>
-
-## Adding another service
-
-The ECS service/task lives in the reusable [`modules/ecs-noa`](modules/ecs-noa)
-module. To run a second container, add another block in `main.tf`:
+Before production, normally set:
 
 ```hcl
-module "ecs_service_worker" {
-  source = "./modules/ecs-noa"
-
-  service_name         = "worker"
-  ecs_cluster_arn      = module.fargate_ecs.arn
-  ecs_cluster_name     = module.fargate_ecs.name
-  security_group_ids   = [module.ecs_task_sg.id]
-  subnet_ids           = module.vpc.private_subnets
-  alb_target_group_arn = module.alb_ecs.target_groups["primary"].arn
-  # ... see main.tf for the full set of inputs
-}
+single_nat_gateway    = false
+use_fargate_spot      = false
+service_desired_count = 2
+autoscaling_min_capacity = 2
 ```
 
-## Clean up
+Also configure HTTPS, remote state, backups appropriate to your recovery
+objectives, monitoring/alerts, and narrowly scoped task IAM policies.
+
+## Documentation
+
+The [developer user guide](docs/USER_GUIDE.md) covers:
+
+- prerequisites and AWS authentication
+- configuration and first deployment
+- building and releasing images
+- environment variables, secrets, and IAM
+- CloudFront, HTTPS, EFS, and PostgreSQL
+- remote state and team workflows
+- production readiness, upgrades, troubleshooting, and cleanup
+
+## Validate changes
 
 ```bash
-terraform destroy
+terraform fmt -check -recursive
+terraform init -backend=false
+terraform validate
+terraform test
+python3 -m pip install --requirement scripts/requirements.txt
+python3 scripts/generate_diagram.py --selfcheck
 ```
+
+GitHub Actions runs the Terraform checks on pull requests. Dependabot checks
+Terraform modules/providers and GitHub Actions weekly. Gitleaks scans the full
+Git history on every pull request, push to `main`, and release.
+
+## Contributions and releases
+
+`main` is protected. The repository owner may push directly; all other
+contributors must open a pull request, pass the `validate` and `gitleaks`
+checks, receive the code owner's approval, and resolve review conversations.
+
+Semantic version tags publish releases after repeating validation and secret
+scanning:
+
+```bash
+git tag -a v1.2.3 -m "v1.2.3"
+git push origin v1.2.3
+```
+
+See [SECURITY.md](SECURITY.md) for vulnerability reporting and secret-handling
+rules.
 
 ## License
 

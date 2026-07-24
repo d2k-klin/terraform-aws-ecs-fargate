@@ -1,0 +1,17 @@
+version: 2
+updates:
+  - package-ecosystem: terraform
+    directory: /
+    schedule:
+      interval: weekly
+    groups:
+      terraform:
+        patterns: ["*"]
+
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: weekly
+    groups:
+      github-actions:
+        patterns: ["*"]

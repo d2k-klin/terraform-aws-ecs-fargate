@@ -1,9 +1,9 @@
 module "cdn" {
   source  = "terraform-aws-modules/cloudfront/aws"
-  version = "~> 6.0"
+  version = "6.7.0"
 
   create              = var.create_cdn
-  price_class         = "PriceClass_All"
+  price_class         = var.cloudfront_price_class
   retain_on_delete    = false
   wait_for_deployment = false
 
@@ -16,30 +16,31 @@ module "cdn" {
         origin_protocol_policy = "http-only"
         origin_ssl_protocols   = ["TLSv1.2"]
       }
-
-      custom_header = {
-        "X-Frame-Options" = var.custom_header
-      }
     }
   }
 
   default_cache_behavior = {
     target_origin_id       = "alb_cdn"
-    viewer_protocol_policy = "allow-all"
+    viewer_protocol_policy = "redirect-to-https"
 
-    allowed_methods = ["GET", "HEAD", "OPTIONS"]
+    allowed_methods = ["DELETE", "GET", "HEAD", "OPTIONS", "PATCH", "POST", "PUT"]
     cached_methods  = ["GET", "HEAD"]
-    compress        = false
+    compress        = true
 
     use_forwarded_values = true
     query_string         = true
-    cookies_forward      = "none"
+    headers              = ["*"]
+    cookies_forward      = "all"
+
+    min_ttl     = 0
+    default_ttl = 0
+    max_ttl     = 0
   }
 
   restrictions = {
     geo_restriction = {
-      restriction_type = "whitelist"
-      locations        = ["DE"]
+      restriction_type = length(var.cloudfront_geo_restriction_locations) == 0 ? "none" : "whitelist"
+      locations        = var.cloudfront_geo_restriction_locations
     }
   }
 

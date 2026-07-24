@@ -1,6 +1,6 @@
 module "fargate_ecs" {
   source  = "terraform-aws-modules/ecs/aws//modules/cluster"
-  version = "~> 7.0"
+  version = "7.5.0"
 
   name = "${local.name}-fargate"
 
@@ -11,19 +11,8 @@ module "fargate_ecs" {
     }
   ]
 
-  # Managed Fargate capacity providers (no EC2 ASGs).
-  cluster_capacity_providers = ["FARGATE", "FARGATE_SPOT"]
+  cluster_capacity_providers         = ["FARGATE", "FARGATE_SPOT"]
+  default_capacity_provider_strategy = local.capacity_provider_strategy
 
-  default_capacity_provider_strategy = {
-    FARGATE_SPOT = {
-      weight = 1
-      base   = 1
-    }
-    FARGATE = {
-      weight = 0
-    }
-  }
-
-  tags       = local.tags
-  depends_on = [module.vpc]
+  tags = local.tags
 }

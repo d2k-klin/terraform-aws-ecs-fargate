@@ -9,9 +9,9 @@
 #
 # terraform {
 #   backend "s3" {
-#     bucket       = "CHANGE-ME-your-terraform-state-bucket"
-#     key          = "terraform-aws-ecs-fargate/terraform.tfstate"
-#     region       = "eu-central-1"
+#     bucket       = "your-unique-terraform-state-bucket"
+#     key          = "myapp/dev/terraform.tfstate"
+#     region       = "us-east-1"
 #     encrypt      = true
 #     use_lockfile = true
 #   }

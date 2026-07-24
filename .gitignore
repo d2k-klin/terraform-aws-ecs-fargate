@@ -1,6 +1,11 @@
 # Terraform working dir and downloaded modules/providers
 .terraform/
 
+# Editor, agent, and Python local state
+.claude/settings.local.json
+__pycache__/
+*.py[cod]
+
 # State files (never commit — may contain secrets)
 *.tfstate
 *.tfstate.*

@@ -1,10 +1,12 @@
 resource "aws_ecr_repository" "main" {
-  name                 = "${var.name}-${var.environment}"
-  image_tag_mutability = "MUTABLE"
+  name                 = local.name
+  image_tag_mutability = "IMMUTABLE"
 
   image_scanning_configuration {
-    scan_on_push = false
+    scan_on_push = true
   }
+
+  tags = local.tags
 }
 
 resource "aws_ecr_lifecycle_policy" "main" {
@@ -13,19 +15,15 @@ resource "aws_ecr_lifecycle_policy" "main" {
   policy = jsonencode({
     rules = [{
       rulePriority = 1
-      description  = "keep last 10 images"
+      description  = "Keep the most recent images"
       action = {
         type = "expire"
       }
       selection = {
         tagStatus   = "any"
         countType   = "imageCountMoreThan"
-        countNumber = 10
+        countNumber = var.ecr_image_count
       }
     }]
   })
-}
-
-output "aws_ecr_repository_url" {
-  value = aws_ecr_repository.main.repository_url
 }
