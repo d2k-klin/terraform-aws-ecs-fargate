@@ -1,19 +1,28 @@
 module "fargate_ecs" {
-  source = "github.com/terraform-aws-modules/terraform-aws-ecs.git?ref=v2.8.0"
+  source  = "terraform-aws-modules/ecs/aws//modules/cluster"
+  version = "~> 7.0"
 
   name = "${local.name}-fargate"
 
-  container_insights = true
-
-  capacity_providers = ["FARGATE", "FARGATE_SPOT"]
-
-  default_capacity_provider_strategy = [
+  setting = [
     {
-      capacity_provider = "FARGATE_SPOT"
-      weight            = 1
-      base              = 1
+      name  = "containerInsights"
+      value = "enabled"
     }
   ]
+
+  # Managed Fargate capacity providers (no EC2 ASGs).
+  cluster_capacity_providers = ["FARGATE", "FARGATE_SPOT"]
+
+  default_capacity_provider_strategy = {
+    FARGATE_SPOT = {
+      weight = 1
+      base   = 1
+    }
+    FARGATE = {
+      weight = 0
+    }
+  }
 
   tags       = local.tags
   depends_on = [module.vpc]

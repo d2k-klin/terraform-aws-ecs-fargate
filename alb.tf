@@ -1,20 +1,44 @@
 module "alb_ecs" {
-  source = "github.com/terraform-aws-modules/terraform-aws-alb.git?ref=v5.12.0"
+  source  = "terraform-aws-modules/alb/aws"
+  version = "~> 10.0"
 
-  name = "${var.name}-${var.environment}"
+  name = local.name
 
   load_balancer_type = "application"
 
-  vpc_id          = module.vpc.vpc_id
-  subnets         = module.vpc.public_subnets
-  security_groups = [module.http_sg.this_security_group_id]
+  vpc_id  = module.vpc.vpc_id
+  subnets = module.vpc.public_subnets
 
-  target_groups = [
-    {
-      name_prefix      = "pri-"
-      backend_protocol = "HTTP"
-      backend_port     = 5000
-      target_type      = "ip"
+  # Reuse the shared HTTP security group instead of creating one.
+  create_security_group = false
+  security_groups       = [module.http_sg.id]
+
+  listeners = {
+    http = {
+      port     = 80
+      protocol = "HTTP"
+      forward = {
+        target_group_key = "primary"
+      }
+    }
+    # Secondary listener used by CodeDeploy for blue/green deployments.
+    http_secondary = {
+      port     = 8080
+      protocol = "HTTP"
+      forward = {
+        target_group_key = "secondary"
+      }
+    }
+  }
+
+  target_groups = {
+    primary = {
+      name_prefix = "pri-"
+      protocol    = "HTTP"
+      port        = var.container_port
+      target_type = "ip"
+      # ECS registers/deregisters targets itself; don't attach here.
+      create_attachment = false
       health_check = {
         enabled             = true
         interval            = 30
@@ -26,16 +50,17 @@ module "alb_ecs" {
         protocol            = "HTTP"
         matcher             = "200"
       }
-    },
-    {
-      name_prefix      = "sec-"
-      backend_protocol = "HTTP"
-      backend_port     = 5000
-      target_type      = "ip"
+    }
+    secondary = {
+      name_prefix       = "sec-"
+      protocol          = "HTTP"
+      port              = var.container_port
+      target_type       = "ip"
+      create_attachment = false
       health_check = {
         enabled             = true
         interval            = 30
-        path                = "/ping"
+        path                = var.health_check_path
         port                = "traffic-port"
         healthy_threshold   = 3
         unhealthy_threshold = 3
@@ -43,22 +68,8 @@ module "alb_ecs" {
         protocol            = "HTTP"
         matcher             = "200"
       }
-
-    },
-  ]
-
-  http_tcp_listeners = [
-    {
-      port               = 80
-      protocol           = "HTTP"
-      target_group_index = 0
-    },
-    {
-      port               = 8080
-      protocol           = "HTTP"
-      target_group_index = 1
-    },
-  ]
+    }
+  }
 
   tags = local.tags
 }

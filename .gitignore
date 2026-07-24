@@ -1,2 +1,20 @@
+# Terraform working dir and downloaded modules/providers
 .terraform/
-.terraform.lock.hcl
+
+# State files (never commit — may contain secrets)
+*.tfstate
+*.tfstate.*
+
+# Saved plans and crash logs
+*.plan
+out.plan
+crash.log
+crash.*.log
+
+# Variable files that may hold secrets
+*.tfvars
+*.tfvars.json
+!example.tfvars
+
+# Keep the dependency lock file committed for reproducible provider versions:
+# .terraform.lock.hcl is intentionally NOT ignored.

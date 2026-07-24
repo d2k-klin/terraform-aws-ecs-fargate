@@ -1,86 +1,127 @@
+# Public-facing ALB security group: HTTP in from anywhere, all out.
 module "http_sg" {
-  source = "github.com/terraform-aws-modules/terraform-aws-security-group//modules/http-80?ref=v3.18.0"
+  source  = "terraform-aws-modules/security-group/aws"
+  version = "~> 6.0"
 
-  name        = "http-sg"
-  description = "Security group with HTTP ports open for everybody (IPv4 CIDR), egress ports are all world open"
+  name        = "${local.name}-http-sg"
+  description = "HTTP/8080 open to the world (IPv4); egress open"
   vpc_id      = module.vpc.vpc_id
 
-  ingress_cidr_blocks = ["0.0.0.0/0"]
+  ingress_rules = {
+    http = {
+      from_port   = 80
+      to_port     = 80
+      ip_protocol = "tcp"
+      cidr_ipv4   = "0.0.0.0/0"
+      description = "HTTP from anywhere"
+    }
+    http_secondary = {
+      from_port   = 8080
+      to_port     = 8080
+      ip_protocol = "tcp"
+      cidr_ipv4   = "0.0.0.0/0"
+      description = "Secondary listener (blue/green) from anywhere"
+    }
+  }
+
+  egress_rules = {
+    all = {
+      ip_protocol = "-1"
+      cidr_ipv4   = "0.0.0.0/0"
+      description = "All outbound"
+    }
+  }
+
+  tags = local.tags
 }
 
+# ECS tasks: only the ALB may reach the container port.
 module "ecs_task_sg" {
-  source = "github.com/terraform-aws-modules/terraform-aws-security-group.git?ref=v3.18.0"
+  source  = "terraform-aws-modules/security-group/aws"
+  version = "~> 6.0"
 
-  name        = "ecs_task_sg"
-  description = "Security group with container ports open for ALB sg"
+  name        = "${local.name}-ecs-task-sg"
+  description = "Container port open to the ALB security group"
   vpc_id      = module.vpc.vpc_id
-  computed_ingress_with_source_security_group_id = [
-    {
-      from_port                = 5000
-      to_port                  = 5000
-      protocol                 = "tcp"
-      description              = "ECS access from ALB"
-      source_security_group_id = module.http_sg.this_security_group_id
-    },
-  ]
-  number_of_computed_ingress_with_source_security_group_id = 1
-  egress_rules                                             = ["all-all"]
+
+  ingress_rules = {
+    from_alb = {
+      from_port                    = var.container_port
+      to_port                      = var.container_port
+      ip_protocol                  = "tcp"
+      referenced_security_group_id = module.http_sg.id
+      description                  = "ECS access from ALB"
+    }
+  }
+
+  egress_rules = {
+    all = {
+      ip_protocol = "-1"
+      cidr_ipv4   = "0.0.0.0/0"
+      description = "All outbound"
+    }
+  }
+
+  tags = local.tags
 }
 
-module "enpoints_sg" {
-  source = "github.com/terraform-aws-modules/terraform-aws-security-group.git?ref=v3.18.0"
-
-  name                = "enpoints_sg"
-  description         = "Security group for endpoints 443 access"
-  vpc_id              = module.vpc.vpc_id
-  ingress_cidr_blocks = [var.cidr]
-  ingress_rules       = ["https-443-tcp"]
-  egress_rules        = ["all-all"]
-}
-
+# RDS: only ECS tasks may reach Postgres. Created only when RDS is enabled.
 module "rds_sg" {
-  source = "github.com/terraform-aws-modules/terraform-aws-security-group.git?ref=v3.18.0"
+  source  = "terraform-aws-modules/security-group/aws"
+  version = "~> 6.0"
 
-  create              = var.create_postgresql
-  name                = "rds_sg"
-  description         = "Security group for RDS from ECS"
-  vpc_id              = module.vpc.vpc_id
-  ingress_cidr_blocks = [var.cidr]
-  computed_ingress_with_source_security_group_id = [
-    {
-      rule                     = "postgresql-tcp"
-      source_security_group_id = module.rds_sg.this_security_group_id
-    },
-    {
-      from_port                = 5432
-      to_port                  = 5432
-      protocol                 = 6
-      description              = "ECS Access to RDS"
-      source_security_group_id = module.ecs_task_sg.this_security_group_id
-    },
-  ]
+  create      = var.create_postgresql
+  name        = "${local.name}-rds-sg"
+  description = "Postgres open to the ECS task security group"
+  vpc_id      = module.vpc.vpc_id
 
-  number_of_computed_ingress_with_source_security_group_id = 2
-  egress_cidr_blocks                                       = ["0.0.0.0/0"]
+  ingress_rules = {
+    from_ecs = {
+      from_port                    = 5432
+      to_port                      = 5432
+      ip_protocol                  = "tcp"
+      referenced_security_group_id = module.ecs_task_sg.id
+      description                  = "ECS access to RDS"
+    }
+  }
+
+  egress_rules = {
+    all = {
+      ip_protocol = "-1"
+      cidr_ipv4   = "0.0.0.0/0"
+      description = "All outbound"
+    }
+  }
+
+  tags = local.tags
 }
 
+# EFS: only ECS tasks may reach NFS.
 module "efs_sg" {
-  source = "github.com/terraform-aws-modules/terraform-aws-security-group.git?ref=v3.18.0"
+  source  = "terraform-aws-modules/security-group/aws"
+  version = "~> 6.0"
 
-  name                = "efs_sg"
-  description         = "Security group for EFS from ECS"
-  vpc_id              = module.vpc.vpc_id
-  ingress_cidr_blocks = [var.cidr]
-  computed_ingress_with_source_security_group_id = [
-    {
-      from_port                = 2049
-      to_port                  = 2049
-      protocol                 = "tcp"
-      description              = "ECS Access to EFS"
-      source_security_group_id = module.ecs_task_sg.this_security_group_id
-    },
-  ]
+  name        = "${local.name}-efs-sg"
+  description = "NFS open to the ECS task security group"
+  vpc_id      = module.vpc.vpc_id
 
-  number_of_computed_ingress_with_source_security_group_id = 1
-  egress_cidr_blocks                                       = ["0.0.0.0/0"]
+  ingress_rules = {
+    from_ecs = {
+      from_port                    = 2049
+      to_port                      = 2049
+      ip_protocol                  = "tcp"
+      referenced_security_group_id = module.ecs_task_sg.id
+      description                  = "ECS access to EFS"
+    }
+  }
+
+  egress_rules = {
+    all = {
+      ip_protocol = "-1"
+      cidr_ipv4   = "0.0.0.0/0"
+      description = "All outbound"
+    }
+  }
+
+  tags = local.tags
 }

@@ -63,3 +63,18 @@ variable "custom_header" {
   description = "Custom Header to be set in  CloudFront and ALB to limit the ALB access only from CDN"
   default     = "CustomHeaderString"
 }
+
+variable "container_port" {
+  description = "Port the container listens on (used by the ALB target groups and ECS task security group)"
+  default     = 5000
+}
+
+variable "db_name" {
+  description = "Initial database name (only used when create_postgresql = true)"
+  default     = "appdb"
+}
+
+variable "db_username" {
+  description = "RDS master username. Do not use 'user' (reserved word). Only used when create_postgresql = true. Password is managed by AWS Secrets Manager."
+  default     = "app_user"
+}
