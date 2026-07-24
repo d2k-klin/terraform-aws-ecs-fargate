@@ -5,16 +5,17 @@ module "alb_ecs" {
   name = local.name
 
   load_balancer_type = "application"
+  internal           = var.create_cdn
 
   vpc_id  = module.vpc.vpc_id
-  subnets = module.vpc.public_subnets
+  subnets = var.create_cdn ? module.vpc.private_subnets : module.vpc.public_subnets
 
   # Reuse the shared HTTP security group instead of creating one.
   create_security_group = false
   security_groups       = [module.http_sg.id]
 
   listeners = merge(
-    var.certificate_arn == null ? {
+    var.create_cdn || var.certificate_arn == null ? {
       http = {
         port     = 80
         protocol = "HTTP"
@@ -23,7 +24,7 @@ module "alb_ecs" {
         }
       }
     } : {},
-    var.certificate_arn != null ? {
+    !var.create_cdn && var.certificate_arn != null ? {
       http_redirect = {
         port     = 80
         protocol = "HTTP"
@@ -34,7 +35,7 @@ module "alb_ecs" {
         }
       }
     } : {},
-    var.certificate_arn != null ? {
+    !var.create_cdn && var.certificate_arn != null ? {
       https = {
         port            = 443
         protocol        = "HTTPS"

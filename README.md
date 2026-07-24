@@ -10,7 +10,8 @@ before publishing your own image.
 ## What this starter creates
 
 - A VPC across two or more automatically discovered Availability Zones
-- Public subnets for an Application Load Balancer
+- Public subnets for a directly exposed ALB, or private ALB subnets when
+  CloudFront is enabled
 - Private subnets for ECS tasks and database subnets for optional RDS
 - One cost-saving NAT Gateway by default, or one per AZ for production
 - An ECS Fargate cluster, service, task definition, rolling deployments, and
@@ -19,11 +20,12 @@ before publishing your own image.
 - CloudWatch container logs with configurable retention
 - Least-privilege network paths between the ALB, ECS, optional EFS, and optional
   PostgreSQL
-- Optional CloudFront, encrypted EFS, and RDS PostgreSQL
+- Optional CloudFront with a private VPC origin, encrypted EFS, and RDS
+  PostgreSQL
 
-The starter intentionally does not create DNS records, an ACM certificate, CI/CD,
-or application-specific IAM permissions. Those choices depend on your domain,
-deployment platform, and application.
+The starter intentionally does not create DNS records, an ACM certificate, an
+application-image deployment pipeline, or application-specific IAM permissions.
+Those choices depend on your domain, deployment platform, and application.
 
 ## Requirements
 
@@ -157,10 +159,10 @@ release instead of reusing `latest`.
 | `container_port` | `80` | Application listener port |
 | `service_desired_count` | `1` | Initial number of tasks |
 | `use_fargate_spot` | `true` | Lower cost, but tasks may be interrupted |
-| `create_cdn` | `false` | Add CloudFront with HTTPS for viewers |
+| `create_cdn` | `false` | Add CloudFront and make the ALB private |
 | `create_efs` | `false` | Add shared persistent storage |
 | `create_postgresql` | `false` | Add RDS PostgreSQL |
-| `certificate_arn` | `null` | Enable HTTPS directly on the ALB |
+| `certificate_arn` | `null` | Enable direct ALB HTTPS when the CDN is off |
 | `tags` | `{}` | Organization, owner, and cost-allocation tags |
 
 See [variables.tf](variables.tf) for every input and validation rule.
@@ -178,10 +180,18 @@ single_nat_gateway    = false
 use_fargate_spot      = false
 service_desired_count = 2
 autoscaling_min_capacity = 2
+create_cdn            = true
 ```
 
 Also configure HTTPS, remote state, backups appropriate to your recovery
 objectives, monitoring/alerts, and narrowly scoped task IAM policies.
+
+When `create_cdn = true`, CloudFront uses an AWS-managed VPC origin to reach an
+internal ALB in private subnets. The ALB security group accepts origin traffic
+only from the AWS-managed CloudFront prefix list, so clients cannot bypass
+CloudFront. One default behavior forwards every HTTP method, header, cookie,
+and query string with caching disabled; a single container can therefore serve
+both its UI and API without separate origins or path rules.
 
 ## Documentation
 

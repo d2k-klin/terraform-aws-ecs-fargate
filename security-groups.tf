@@ -1,14 +1,30 @@
-# Public-facing ALB security group.
+# CloudFront publishes this prefix list for traffic to customer origins.
+data "aws_ec2_managed_prefix_list" "cloudfront" {
+  count = var.create_cdn ? 1 : 0
+  name  = "com.amazonaws.global.cloudfront.origin-facing"
+}
+
+# The ALB accepts either CloudFront VPC-origin traffic or explicitly allowed
+# public CIDRs, depending on whether the CDN is enabled.
 module "http_sg" {
   source  = "terraform-aws-modules/security-group/aws"
   version = "6.0.0"
 
   name        = "${local.name}-http-sg"
-  description = "Public web traffic to the application load balancer"
+  description = var.create_cdn ? "CloudFront traffic to the private application load balancer" : "Public web traffic to the application load balancer"
   vpc_id      = module.vpc.vpc_id
 
   ingress_rules = merge(
-    {
+    var.create_cdn ? {
+      cloudfront_http = {
+        from_port      = 80
+        to_port        = 80
+        ip_protocol    = "tcp"
+        prefix_list_id = data.aws_ec2_managed_prefix_list.cloudfront[0].id
+        description    = "HTTP ingress from CloudFront VPC origins"
+      }
+    } : {},
+    !var.create_cdn ? {
       for index, cidr in var.allowed_ipv4_cidr_blocks : "http_${index}" => {
         from_port   = 80
         to_port     = 80
@@ -16,8 +32,8 @@ module "http_sg" {
         cidr_ipv4   = cidr
         description = "HTTP ingress"
       }
-    },
-    var.certificate_arn == null ? {} : {
+    } : {},
+    !var.create_cdn && var.certificate_arn != null ? {
       for index, cidr in var.allowed_ipv4_cidr_blocks : "https_${index}" => {
         from_port   = 443
         to_port     = 443
@@ -25,7 +41,7 @@ module "http_sg" {
         cidr_ipv4   = cidr
         description = "HTTPS ingress"
       }
-    }
+    } : {}
   )
 
   egress_rules = {

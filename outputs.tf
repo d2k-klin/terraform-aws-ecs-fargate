@@ -8,8 +8,13 @@ output "application_url" {
 }
 
 output "alb_dns_name" {
-  description = "DNS name of the Application Load Balancer."
+  description = "DNS name of the Application Load Balancer. It is private when create_cdn is true."
   value       = module.alb_ecs.dns_name
+}
+
+output "alb_is_internal" {
+  description = "Whether the Application Load Balancer is internal."
+  value       = var.create_cdn
 }
 
 output "cloudfront_domain_name" {
@@ -58,7 +63,7 @@ output "private_subnet_ids" {
 }
 
 output "public_subnet_ids" {
-  description = "IDs of the public ALB subnets."
+  description = "IDs of the public NAT and direct-ALB subnets."
   value       = module.vpc.public_subnets
 }
 

@@ -100,7 +100,7 @@ variable "single_nat_gateway" {
 
 variable "allowed_ipv4_cidr_blocks" {
   type        = list(string)
-  description = "IPv4 CIDRs allowed to reach the public ALB."
+  description = "IPv4 CIDRs allowed to reach the ALB when create_cdn is false. Ignored for a private CloudFront VPC origin."
   default     = ["0.0.0.0/0"]
 
   validation {
@@ -111,8 +111,13 @@ variable "allowed_ipv4_cidr_blocks" {
 
 variable "certificate_arn" {
   type        = string
-  description = "Optional ACM certificate ARN. When set, HTTP redirects to an HTTPS listener."
+  description = "Optional regional ACM certificate ARN for direct ALB HTTPS when create_cdn is false."
   default     = null
+
+  validation {
+    condition     = var.certificate_arn == null || !var.create_cdn
+    error_message = "certificate_arn configures direct ALB HTTPS and cannot be set when create_cdn is true."
+  }
 }
 
 variable "container_image" {
@@ -259,7 +264,7 @@ variable "container_mount_path" {
 
 variable "create_cdn" {
   type        = bool
-  description = "Create a CloudFront distribution in front of the ALB."
+  description = "Create CloudFront with a VPC origin and move the ALB into private subnets."
   default     = false
 }
 

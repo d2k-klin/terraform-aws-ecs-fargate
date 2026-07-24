@@ -19,7 +19,8 @@ availability_zone_count = 2
 single_nat_gateway      = true
 use_fargate_spot        = true
 
-# Optional add-ons.
+# Optional add-ons. Enabling the CDN makes the ALB private and connects
+# CloudFront to it through a VPC origin.
 create_cdn        = false
 create_efs        = false
 create_postgresql = false

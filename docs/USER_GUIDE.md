@@ -8,13 +8,15 @@ application on ECS Fargate. Commands assume a POSIX-compatible shell.
 Traffic follows this path:
 
 ```text
-Internet → optional CloudFront → Application Load Balancer
+Internet → optional CloudFront VPC origin → Application Load Balancer
          → ECS tasks in private subnets → optional RDS/EFS
 ```
 
 ECS tasks have no public IP address. They pull images and reach external
 services through a NAT Gateway. Security groups allow only the ALB to reach the
 container port, and only ECS tasks to reach optional PostgreSQL and EFS.
+When CloudFront is enabled, the ALB also moves into private subnets and accepts
+origin traffic only from CloudFront's AWS-managed prefix list.
 
 The default deployment is intended for development:
 
@@ -236,10 +238,10 @@ managed policies.
 
 ## 7. Enable optional components
 
-### HTTPS on the load balancer
+### Direct HTTPS on the load balancer
 
 Request or import an ACM certificate in the same region as the ALB, validate it,
-then set:
+then set the following when `create_cdn = false`:
 
 ```hcl
 certificate_arn = "arn:aws:acm:eu-west-1:<AWS_ACCOUNT_ID>:certificate/..."
@@ -247,6 +249,8 @@ certificate_arn = "arn:aws:acm:eu-west-1:<AWS_ACCOUNT_ID>:certificate/..."
 
 The port 80 listener will redirect to HTTPS. Create your DNS alias record to the
 `alb_dns_name` output. DNS zone ownership is intentionally outside this stack.
+When CloudFront is enabled, TLS terminates at CloudFront and the private VPC
+origin uses HTTP to the internal ALB, so do not set `certificate_arn`.
 
 ### CloudFront
 
@@ -255,10 +259,24 @@ create_cdn            = true
 cloudfront_price_class = "PriceClass_100"
 ```
 
-CloudFront provides HTTPS on its generated domain, forwards dynamic methods,
-cookies, headers, and query strings, and disables caching by default. This is a
-safe baseline for a dynamic application; add intentional cache policies for
-static paths later.
+CloudFront provides HTTPS on its generated domain and uses a VPC origin to reach
+an internal ALB in the private subnets. The ALB is no longer reachable directly
+from the public internet. Its security group permits port 80 only from the
+AWS-managed `com.amazonaws.global.cloudfront.origin-facing` prefix list.
+
+The default behavior sends all paths to the same container, allows every common
+HTTP method, forwards headers, cookies, and query strings, and disables caching.
+This works for an application where one container serves both UI and API. Add
+an explicit cached behavior later only for paths whose responses are genuinely
+safe to cache.
+
+VPC origins require a supported commercial AWS Region, an internet gateway
+attached to the VPC, and available private IPv4 addresses for CloudFront's
+service-managed network interfaces. The internet gateway marks the VPC as
+internet-capable but is not used to route origin traffic. VPC origins do not
+support gRPC or Lambda@Edge origin request/response triggers. Check the
+[current AWS VPC-origin prerequisites and Region list](https://docs.aws.amazon.com/AmazonCloudFront/latest/DeveloperGuide/private-content-vpc-origins.html)
+before enabling this option.
 
 CloudFront has no country restriction by default. To allow selected countries:
 
@@ -349,7 +367,7 @@ service_desired_count    = 2
 autoscaling_min_capacity = 2
 autoscaling_max_capacity = 10
 log_retention_days       = 90
-allowed_ipv4_cidr_blocks = ["0.0.0.0/0"]
+create_cdn               = true
 ```
 
 Then add the controls appropriate to your organization:
@@ -378,6 +396,15 @@ git diff -- .terraform.lock.hcl
 
 Read upstream changelogs before accepting a new major version. Commit the lock
 file so every developer and CI uses the same provider selections.
+
+### Upgrading from v1
+
+In v2, `create_cdn = true` changes the ALB from internet-facing/public subnets
+to internal/private subnets and replaces the public CloudFront custom origin
+with a VPC origin. Expect Terraform to replace the ALB. Schedule the change
+carefully for an existing application, confirm that its Region and selected
+Availability Zones support VPC origins, and test the CloudFront URL before
+removing any old DNS path.
 
 ### Existing repository users
 

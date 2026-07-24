@@ -4,6 +4,12 @@ mock_provider "aws" {
       names = ["us-east-1a", "us-east-1b", "us-east-1c"]
     }
   }
+
+  mock_data "aws_ec2_managed_prefix_list" {
+    defaults = {
+      id = "pl-cloudfront"
+    }
+  }
 }
 
 run "portable_defaults" {
@@ -37,5 +43,10 @@ run "optional_components" {
   assert {
     condition     = var.create_cdn && var.create_efs && var.create_postgresql
     error_message = "All optional component branches must produce a valid plan."
+  }
+
+  assert {
+    condition     = output.alb_is_internal
+    error_message = "Enabling CloudFront must make the ALB internal."
   }
 }
