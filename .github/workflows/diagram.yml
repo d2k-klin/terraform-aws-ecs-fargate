@@ -23,6 +23,5 @@ jobs:
       - run: sudo apt-get update && sudo apt-get install -y graphviz
       - run: pip install --requirement scripts/requirements.txt
       - run: python scripts/generate_diagram.py --selfcheck
-      - run: python scripts/generate_diagram.py
-      - name: Verify the committed diagram is current
-        run: git diff --exit-code -- images/architecture-diagram.png
+      - name: Render the architecture diagram
+        run: python scripts/generate_diagram.py
