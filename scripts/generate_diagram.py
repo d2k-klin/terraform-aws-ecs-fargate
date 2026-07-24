@@ -1,69 +1,15 @@
 #!/usr/bin/env python3
-"""Generate an AWS-icon architecture diagram straight from the .tf files.
+"""Generate the AWS architecture diagram from the Terraform configuration.
 
-No terraform init/state needed: we parse HCL, map each resource/module to a
-`diagrams` AWS node, and infer edges from one block referencing another.
+No Terraform state is needed. The HCL parser verifies the required stack blocks
+before rendering the public, private, and database subnet placement.
 """
 import glob
-import importlib
 import json
 import os
 import sys
 
 import hcl2
-
-# resource type / module keyword -> first diagrams class that imports wins.
-# Fallback is aws.general.General so an unknown type never breaks CI.
-ICONS = {
-    "aws_ecs_service": ["diagrams.aws.compute:ECS"],
-    "aws_ecs_task_definition": ["diagrams.aws.compute:Fargate"],
-    "aws_ecr_repository": ["diagrams.aws.compute:ECR"],
-    "aws_ecr_lifecycle_policy": ["diagrams.aws.compute:ECR"],
-    "aws_efs_file_system": ["diagrams.aws.storage:EFS"],
-    "aws_efs_mount_target": ["diagrams.aws.storage:EFS"],
-    "aws_cloudwatch_log_group": ["diagrams.aws.management:Cloudwatch"],
-    "aws_iam_role": ["diagrams.aws.security:IAMRole", "diagrams.aws.security:IAM"],
-    "aws_iam_role_policy_attachment": ["diagrams.aws.security:IAM"],
-    "aws_appautoscaling_target": ["diagrams.aws.compute:EC2AutoScaling", "diagrams.aws.compute:AutoScaling"],
-    "aws_appautoscaling_policy": ["diagrams.aws.compute:EC2AutoScaling", "diagrams.aws.compute:AutoScaling"],
-}
-# module names are freeform, so match by keyword.
-MODULE_ICONS = {
-    "vpc": ["diagrams.aws.network:VPC"],
-    "alb": ["diagrams.aws.network:ALB", "diagrams.aws.network:ELB"],
-    "cdn": ["diagrams.aws.network:CloudFront"],
-    "cloudfront": ["diagrams.aws.network:CloudFront"],
-    "rds": ["diagrams.aws.database:RDS"],
-    "db": ["diagrams.aws.database:RDS"],
-    "ecs": ["diagrams.aws.compute:ECS"],
-    "fargate": ["diagrams.aws.compute:Fargate"],
-    "sg": ["diagrams.aws.security:IAM"],
-}
-FALLBACK = ["diagrams.aws.general:General"]
-
-
-def _resolve(candidates):
-    for c in candidates + FALLBACK:
-        mod, cls = c.split(":")
-        try:
-            return getattr(importlib.import_module(mod), cls)
-        except (ImportError, AttributeError):
-            continue
-    raise RuntimeError("no diagrams class resolved, is `diagrams` installed?")
-
-
-def _icon_for(addr):
-    if addr.startswith("module."):
-        name = addr.split(".", 1)[1].lower()
-        if name.endswith("sg") or name.endswith("_sg"):
-            return MODULE_ICONS["sg"]
-        for kw, cands in MODULE_ICONS.items():
-            if kw in name:
-                return cands
-        return FALLBACK
-    rtype = addr.split(".", 1)[0]
-    return ICONS.get(rtype, FALLBACK)
-
 
 def _unq(s):
     # some python-hcl2 versions keep the surrounding quotes inside the key.
@@ -96,119 +42,58 @@ def infer_edges(bodies):
     return edges
 
 
-def _tier(addr):
-    if addr.startswith("module."):
-        name = addr.split(".", 1)[1].lower()
-        if name.endswith("sg") or name.endswith("_sg"):
-            return "Security Groups"
-        if "vpc" in name:
-            return "Network"
-        if "cdn" in name or "cloudfront" in name:
-            return "Edge"
-        if "alb" in name or "lb" in name:
-            return "Load Balancing"
-        if "db" in name or "rds" in name:
-            return "Data"
-        return "Compute"
-    rtype = addr.split(".", 1)[0]
-    if any(k in rtype for k in ("efs", "rds", "_db", "s3")):
-        return "Data"
-    if "ecr" in rtype or "cloudwatch" in rtype:
-        return "Regional"  # AWS-managed, lives outside the VPC
-    return "Compute"
-
-
-def _label(addr):
-    # drop noise: module.x -> x ; aws_ecr_repository.main -> ecr_repository
-    if addr.startswith("module."):
-        return addr.split(".", 1)[1]
-    return addr.split(".", 1)[0].removeprefix("aws_")
-
-
-def _find(bodies, tier, *keywords):
-    """First node in `tier` matching any keyword (by priority), else any."""
-    cands = [a for a in bodies if _tier(a) == tier]
-    for kw in keywords:
-        for a in cands:
-            if kw in a:
-                return a
-    return cands[0] if cands else None
-
-
 def render(bodies, out="images/architecture-diagram"):
-    from collections import defaultdict
-
     from diagrams import Cluster, Diagram, Edge
+    from diagrams.aws.compute import ECR, Fargate
+    from diagrams.aws.database import RDS
+    from diagrams.aws.management import CloudwatchLogs
+    from diagrams.aws.network import ALB, CloudFront, InternetGateway, NATGateway
+    from diagrams.aws.storage import EFS
+    from diagrams.onprem.client import Users
 
-    groups = defaultdict(list)
-    for addr in bodies:
-        groups[_tier(addr)].append(addr)
-
-    nodes = {}
-
-    def place(addr):
-        nodes[addr] = _resolve(_icon_for(addr))(_label(addr))
-
-    def cluster(label, tier):
-        if groups[tier]:
-            with Cluster(label):
-                for addr in groups[tier]:
-                    place(addr)
+    required = {"module.vpc", "module.alb_ecs", "module.ecs_service"}
+    missing = required - bodies.keys()
+    if missing:
+        raise ValueError(f"missing required Terraform blocks: {sorted(missing)}")
 
     os.makedirs(os.path.dirname(out) or ".", exist_ok=True)
-    graph_attr = {"ranksep": "1.3", "nodesep": "0.6", "pad": "0.6",
+    graph_attr = {"ranksep": "1.4", "nodesep": "0.7", "pad": "0.5",
                   "splines": "ortho", "compound": "true"}
-    with Diagram("AWS ECS Fargate", filename=out, outformat="png",
+    with Diagram("AWS ECS Fargate — public and private subnet placement",
+                 filename=out, outformat="png",
                  show=False, direction="LR", graph_attr=graph_attr):
-        cluster("Edge / CDN", "Edge")
-        cluster("Regional (AWS-managed)", "Regional")
-        with Cluster("VPC"):
-            for addr in groups["Network"]:  # the VPC itself, no wrapping subbox
-                place(addr)
-            cluster("Load Balancing", "Load Balancing")
-            cluster("Application (ECS / Fargate)", "Compute")
-            cluster("Data (RDS / EFS)", "Data")
-            for addr in groups["Security Groups"]:  # placed by their protects-edge
-                place(addr)
+        users = Users("Users")
+        cdn = CloudFront("CloudFront\n(CDN on)")
 
-        # curated flow backbone: internet -> cdn -> alb -> ecs -> data.
-        cdn = _find(bodies, "Edge")
-        lb = _find(bodies, "Load Balancing")
-        svc = _find(bodies, "Compute", "ecs_service", "service", "ecs")
-        ecr = _find(bodies, "Regional", "ecr_repository", "ecr")
-        cw = _find(bodies, "Regional", "cloudwatch")
-        far = _find(bodies, "Compute", "fargate")
-        data = [a for a in bodies if _tier(a) == "Data" and "mount" not in a]
+        with Cluster("AWS Region"):
+            ecr = ECR("ECR")
+            logs = CloudwatchLogs("CloudWatch Logs")
 
-        def link(a, b, **kw):
-            if a and b and a in nodes and b in nodes:
-                nodes[a] >> Edge(**kw) >> nodes[b]
+            with Cluster("VPC"):
+                internet_gateway = InternetGateway("Internet gateway")
 
-        link(cdn, lb)
-        link(lb, svc)
-        link(ecr, svc)
-        link(far, svc)
-        link(svc, cw)
-        for d in data:
-            link(svc, d)
-        # intra-tier sub-resource links (ecr->lifecycle, efs->mount).
-        for dep, user in infer_edges(bodies):
-            if _tier(dep) == _tier(user) and _tier(dep) in (
-                    "Compute", "Data", "Regional"):
-                link(dep, user)
-        # tie each security group to the resource it actually protects.
-        def _sg_target(sg):
-            name = sg.split(".", 1)[1].lower()
-            if any(k in name for k in ("http", "alb", "lb")):
-                return lb
-            if any(k in name for k in ("rds", "db")):
-                return _find(bodies, "Data", "db", "rds")
-            if "efs" in name:
-                return _find(bodies, "Data", "efs_file_system", "efs")
-            return svc  # ecs_task_sg and anything else guards the service
+                with Cluster("Public subnets (selected AZs)"):
+                    nat = NATGateway("NAT gateway(s)")
 
-        for sg in groups["Security Groups"]:
-            link(sg, _sg_target(sg), style="dashed", label="protects")
+                with Cluster("Private subnets (selected AZs)"):
+                    internal_alb = ALB("Internal ALB")
+                    service = Fargate("ECS Fargate\nUI + API")
+                    efs = EFS("EFS mount targets\n(optional)")
+
+                with Cluster("Database subnet group"):
+                    database = RDS("RDS PostgreSQL\n(optional)")
+
+        users >> Edge(label="HTTPS") >> cdn
+        cdn >> Edge(label="VPC origin") >> internal_alb
+        internal_alb >> Edge(label="ALB → task SG") >> service
+
+        ecr >> Edge(label="image pull", constraint="false") >> service
+        service >> Edge(label="logs", constraint="false") >> logs
+        service >> Edge(label="NFS 2049", constraint="false") >> efs
+        service >> Edge(label="PostgreSQL 5432") >> database
+        service >> Edge(label="outbound", style="dashed",
+                        constraint="false") >> nat
+        nat >> Edge(style="dashed", constraint="false") >> internet_gateway
 
 
 def _selfcheck():
@@ -221,6 +106,12 @@ def _selfcheck():
     assert ("module.vpc", "module.alb") in edges
     assert ("module.alb", "aws_ecs_service.main") in edges
     assert ("module.alb", "module.vpc") not in edges  # direction matters
+    try:
+        render({}, out="/tmp/unused")
+    except ValueError as error:
+        assert "missing required Terraform blocks" in str(error)
+    else:
+        raise AssertionError("render must reject an incomplete configuration")
     print("selfcheck ok")
 
 

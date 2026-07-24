@@ -7,6 +7,12 @@ before publishing your own image.
 
 ![Architecture diagram](images/architecture-diagram.png)
 
+The diagram shows the recommended `create_cdn = true` path: CloudFront reaches
+an internal ALB in private subnets, while NAT Gateways remain in public subnets
+for task egress. ECR and CloudWatch are regional AWS services outside the VPC,
+and RDS uses the database subnet group. With `create_cdn = false`, the same ALB
+moves to the public subnets for direct access.
+
 ## What this starter creates
 
 - A VPC across two or more automatically discovered Availability Zones

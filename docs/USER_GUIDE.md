@@ -18,6 +18,12 @@ container port, and only ECS tasks to reach optional PostgreSQL and EFS.
 When CloudFront is enabled, the ALB also moves into private subnets and accepts
 origin traffic only from CloudFront's AWS-managed prefix list.
 
+The architecture diagram in the README shows this production-oriented path.
+Public subnets contain the NAT Gateways, private subnets contain the internal
+ALB, ECS service, and EFS mount targets, and the database subnet group contains
+RDS. ECR and CloudWatch remain regional managed services outside the VPC. When
+the CDN is disabled, Terraform places the ALB in the public subnets instead.
+
 The default deployment is intended for development:
 
 - two Availability Zones
