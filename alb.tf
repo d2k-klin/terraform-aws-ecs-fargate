@@ -1,6 +1,6 @@
 module "alb_ecs" {
   source  = "terraform-aws-modules/alb/aws"
-  version = "10.5.0"
+  version = "10.5.1"
 
   name = local.name
 

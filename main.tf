@@ -1,6 +1,6 @@
 module "ecs_service" {
   source  = "terraform-aws-modules/ecs/aws//modules/service"
-  version = "7.5.0"
+  version = "7.6.0"
 
   name        = local.name
   cluster_arn = module.fargate_ecs.arn

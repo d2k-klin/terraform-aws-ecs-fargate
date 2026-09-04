@@ -1,6 +1,6 @@
 module "cdn" {
   source  = "terraform-aws-modules/cloudfront/aws"
-  version = "6.7.0"
+  version = "6.7.1"
 
   create              = var.create_cdn
   price_class         = var.cloudfront_price_class

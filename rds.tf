@@ -1,6 +1,6 @@
 module "db_dev" {
   source  = "terraform-aws-modules/rds/aws"
-  version = "7.2.0"
+  version = "7.2.1"
 
   create_db_instance = var.create_postgresql
   identifier         = "${local.name}-db"
