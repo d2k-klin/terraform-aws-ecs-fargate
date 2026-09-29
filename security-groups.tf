@@ -7,6 +7,7 @@ data "aws_ec2_managed_prefix_list" "cloudfront" {
 # The ALB accepts either CloudFront VPC-origin traffic or explicitly allowed
 # public CIDRs, depending on whether the CDN is enabled.
 module "http_sg" {
+  # checkov:skip=CKV_TF_1:Registry module pinned to an exact version; Dependabot proposes reviewed updates.
   source  = "terraform-aws-modules/security-group/aws"
   version = "6.0.0"
 
@@ -57,6 +58,7 @@ module "http_sg" {
 
 # ECS tasks: only the ALB may reach the container port.
 module "ecs_task_sg" {
+  # checkov:skip=CKV_TF_1:Registry module pinned to an exact version; Dependabot proposes reviewed updates.
   source  = "terraform-aws-modules/security-group/aws"
   version = "6.0.0"
 
@@ -87,6 +89,7 @@ module "ecs_task_sg" {
 
 # RDS: only ECS tasks may reach Postgres. Created only when RDS is enabled.
 module "rds_sg" {
+  # checkov:skip=CKV_TF_1:Registry module pinned to an exact version; Dependabot proposes reviewed updates.
   source  = "terraform-aws-modules/security-group/aws"
   version = "6.0.0"
 
@@ -118,6 +121,7 @@ module "rds_sg" {
 
 # EFS: only ECS tasks may reach NFS. Created only when EFS is enabled.
 module "efs_sg" {
+  # checkov:skip=CKV_TF_1:Registry module pinned to an exact version; Dependabot proposes reviewed updates.
   source  = "terraform-aws-modules/security-group/aws"
   version = "6.0.0"
 

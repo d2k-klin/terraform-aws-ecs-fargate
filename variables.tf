@@ -225,13 +225,25 @@ variable "use_fargate_spot" {
 
 variable "log_retention_days" {
   type        = number
-  description = "CloudWatch log retention in days."
-  default     = 30
+  description = "Retention in days for container, VPC flow, and RDS logs. One year meets common audit expectations."
+  default     = 365
 
   validation {
     condition     = contains([1, 3, 5, 7, 14, 30, 60, 90, 120, 150, 180, 365, 400, 545, 731, 1096, 1827, 2192, 2557, 2922, 3288, 3653], var.log_retention_days)
     error_message = "log_retention_days must be a retention period supported by CloudWatch Logs."
   }
+}
+
+variable "enable_flow_log" {
+  type        = bool
+  description = "Send VPC flow logs to CloudWatch Logs."
+  default     = true
+}
+
+variable "deletion_protection" {
+  type        = bool
+  description = "Protect the ALB and RDS from deletion and take a final RDS snapshot. Set false and apply before destroying."
+  default     = true
 }
 
 variable "ecr_image_count" {
@@ -285,6 +297,12 @@ variable "cloudfront_geo_restriction_locations" {
   default     = []
 }
 
+variable "cloudfront_web_acl_arn" {
+  type        = string
+  description = "Optional AWS WAFv2 web ACL ARN (scope CLOUDFRONT, us-east-1) to attach to CloudFront."
+  default     = null
+}
+
 variable "create_postgresql" {
   type        = bool
   description = "Create an RDS PostgreSQL instance."
@@ -309,14 +327,20 @@ variable "db_instance_class" {
   default     = "db.t4g.micro"
 }
 
+variable "db_multi_az" {
+  type        = bool
+  description = "Run RDS as Multi-AZ. Doubles the instance cost."
+  default     = false
+}
+
 variable "db_backup_retention_days" {
   type        = number
   description = "Days of automated RDS backups."
   default     = 7
 
   validation {
-    condition     = var.db_backup_retention_days >= 0 && var.db_backup_retention_days <= 35
-    error_message = "db_backup_retention_days must be between 0 and 35."
+    condition     = var.db_backup_retention_days >= 1 && var.db_backup_retention_days <= 35
+    error_message = "db_backup_retention_days must be between 1 and 35; 0 would disable automated backups."
   }
 }
 

@@ -1,6 +1,7 @@
 module "ecs_service" {
+  # checkov:skip=CKV_TF_1:Registry module pinned to an exact version; Dependabot proposes reviewed updates.
   source  = "terraform-aws-modules/ecs/aws//modules/service"
-  version = "7.5.0"
+  version = "7.6.1"
 
   name        = local.name
   cluster_arn = module.fargate_ecs.arn

@@ -1,6 +1,7 @@
 module "vpc" {
+  # checkov:skip=CKV_TF_1:Registry module pinned to an exact version; Dependabot proposes reviewed updates.
   source  = "terraform-aws-modules/vpc/aws"
-  version = "6.6.1"
+  version = "6.7.3"
 
   name = "${local.name}-vpc"
 
@@ -21,6 +22,13 @@ module "vpc" {
 
   enable_nat_gateway = true
   single_nat_gateway = var.single_nat_gateway
+
+  # Network audit trail. Rejected and accepted flows land in CloudWatch Logs.
+  enable_flow_log                                 = var.enable_flow_log
+  create_flow_log_cloudwatch_log_group            = var.enable_flow_log
+  create_flow_log_cloudwatch_iam_role             = var.enable_flow_log
+  flow_log_max_aggregation_interval               = 60
+  flow_log_cloudwatch_log_group_retention_in_days = var.log_retention_days
 
   tags = local.tags
 }

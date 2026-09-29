@@ -5,6 +5,11 @@ to AWS ECS Fargate. The defaults discover Availability Zones in your selected
 region and launch a working nginx container, so you can verify the platform
 before publishing your own image.
 
+It is also a compliance-ready baseline: the defaults pass the same Checkov scan
+that [WardBee by ScanComb](https://scancomb.com) runs on connected
+repositories, and every control is mapped to ISO 27001, SOC 2, CIS v8, NIS2,
+and NIST 800-53 in the [compliance guide](docs/COMPLIANCE.md).
+
 ![Architecture diagram](images/architecture-diagram.png)
 
 The diagram shows the recommended `create_cdn = true` path: CloudFront reaches
@@ -23,11 +28,12 @@ moves to the public subnets for direct access.
 - An ECS Fargate cluster, service, task definition, rolling deployments, and
   CPU/memory autoscaling
 - An ECR repository with immutable tags, push scanning, and lifecycle cleanup
-- CloudWatch container logs with configurable retention
+- CloudWatch container, VPC flow, and RDS logs with one-year default retention
+- Deletion protection on the ALB and RDS, and CloudFront security headers
 - Least-privilege network paths between the ALB, ECS, optional EFS, and optional
   PostgreSQL
-- Optional CloudFront with a private VPC origin, encrypted EFS, and RDS
-  PostgreSQL
+- Optional CloudFront with a private VPC origin and WAF attachment, encrypted
+  EFS, and RDS PostgreSQL with backups, IAM auth, and optional Multi-AZ
 
 The starter intentionally does not create DNS records, an ACM certificate, an
 application-image deployment pipeline, or application-specific IAM permissions.
@@ -43,19 +49,19 @@ Those choices depend on your domain, deployment platform, and application.
 | AWS account | Credentials with permission to create the resources above |
 
 The configuration uses AWS provider `>= 6.46, < 7.0`. The committed lock file
-currently selects `6.56.0`.
+currently selects `6.66.0`.
 
 ### Pinned module versions
 
-These were the latest releases in the Terraform Registry on 24 July 2026:
+These were the latest releases in the Terraform Registry on 29 September 2026:
 
 | Module | Version |
 |---|---:|
-| [`terraform-aws-modules/vpc/aws`](https://registry.terraform.io/modules/terraform-aws-modules/vpc/aws/latest) | `6.6.1` |
-| [`terraform-aws-modules/alb/aws`](https://registry.terraform.io/modules/terraform-aws-modules/alb/aws/latest) | `10.5.0` |
-| [`terraform-aws-modules/ecs/aws`](https://registry.terraform.io/modules/terraform-aws-modules/ecs/aws/latest) (cluster + service) | `7.5.0` |
-| [`terraform-aws-modules/rds/aws`](https://registry.terraform.io/modules/terraform-aws-modules/rds/aws/latest) | `7.2.0` |
-| [`terraform-aws-modules/cloudfront/aws`](https://registry.terraform.io/modules/terraform-aws-modules/cloudfront/aws/latest) | `6.7.0` |
+| [`terraform-aws-modules/vpc/aws`](https://registry.terraform.io/modules/terraform-aws-modules/vpc/aws/latest) | `6.7.3` |
+| [`terraform-aws-modules/alb/aws`](https://registry.terraform.io/modules/terraform-aws-modules/alb/aws/latest) | `10.5.1` |
+| [`terraform-aws-modules/ecs/aws`](https://registry.terraform.io/modules/terraform-aws-modules/ecs/aws/latest) (cluster + service) | `7.6.1` |
+| [`terraform-aws-modules/rds/aws`](https://registry.terraform.io/modules/terraform-aws-modules/rds/aws/latest) | `7.2.2` |
+| [`terraform-aws-modules/cloudfront/aws`](https://registry.terraform.io/modules/terraform-aws-modules/cloudfront/aws/latest) | `6.7.1` |
 | [`terraform-aws-modules/security-group/aws`](https://registry.terraform.io/modules/terraform-aws-modules/security-group/aws/latest) | `6.0.0` |
 
 Modules are pinned because Terraform does not record module selections in the
@@ -169,6 +175,11 @@ release instead of reusing `latest`.
 | `create_efs` | `false` | Add shared persistent storage |
 | `create_postgresql` | `false` | Add RDS PostgreSQL |
 | `certificate_arn` | `null` | Enable direct ALB HTTPS when the CDN is off |
+| `log_retention_days` | `365` | Container, VPC flow, and RDS log retention |
+| `enable_flow_log` | `true` | VPC flow logs to CloudWatch |
+| `deletion_protection` | `true` | Protect ALB and RDS; set `false` before destroying |
+| `db_multi_az` | `false` | Multi-AZ RDS for production |
+| `cloudfront_web_acl_arn` | `null` | Attach an existing WAFv2 web ACL to CloudFront |
 | `tags` | `{}` | Organization, owner, and cost-allocation tags |
 
 See [variables.tf](variables.tf) for every input and validation rule.
@@ -177,7 +188,8 @@ See [variables.tf](variables.tf) for every input and validation rule.
 
 This repository starts in a cost-conscious development mode. NAT Gateway, ALB,
 Fargate, CloudFront, EFS, RDS, data transfer, and logs can all incur charges.
-Run `terraform destroy` when an experiment is finished.
+When an experiment is finished, set `deletion_protection = false`, apply, and
+then run `terraform destroy`.
 
 Before production, normally set:
 
@@ -187,6 +199,7 @@ use_fargate_spot      = false
 service_desired_count = 2
 autoscaling_min_capacity = 2
 create_cdn            = true
+db_multi_az           = true
 ```
 
 Also configure HTTPS, remote state, backups appropriate to your recovery
@@ -211,6 +224,9 @@ The [developer user guide](docs/USER_GUIDE.md) covers:
 - remote state and team workflows
 - production readiness, upgrades, troubleshooting, and cleanup
 
+The [compliance guide](docs/COMPLIANCE.md) maps every control to framework
+requirements and runtime Prowler checks, and lists accepted exceptions.
+
 ## Validate changes
 
 ```bash
@@ -218,19 +234,20 @@ terraform fmt -check -recursive
 terraform init -backend=false
 terraform validate
 terraform test
+checkov -d . --framework terraform --compact
 python3 -m pip install --requirement scripts/requirements.txt
 python3 scripts/generate_diagram.py --selfcheck
 ```
 
-GitHub Actions runs the Terraform checks on pull requests. Dependabot checks
+GitHub Actions runs the Terraform checks and a Checkov scan on pull requests. Dependabot checks
 Terraform modules/providers and GitHub Actions weekly. Gitleaks scans the full
 Git history on every pull request, push to `main`, and release.
 
 ## Contributions and releases
 
 `main` is protected. The repository owner may push directly; all other
-contributors must open a pull request, pass the `validate` and `gitleaks`
-checks, receive the code owner's approval, and resolve review conversations.
+contributors must open a pull request, pass the `validate`, `checkov`, and
+`gitleaks` checks, receive the code owner's approval, and resolve review conversations.
 
 Semantic version tags publish releases after repeating validation and secret
 scanning:

@@ -19,13 +19,26 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
+  checkov:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      # Same scan WardBee runs on connected repositories. Skips must carry an
+      # inline justification; see docs/COMPLIANCE.md.
+      - uses: bridgecrewio/checkov-action@v12
+        with:
+          directory: .
+          framework: terraform
+          compact: true
+          quiet: true
+
   validate:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7
       - uses: hashicorp/setup-terraform@v4
         with:
-          terraform_version: "1.15.8"
+          terraform_version: "1.16.4"
       - run: terraform fmt -check -recursive
       - run: terraform init -backend=false
       - run: terraform validate

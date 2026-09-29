@@ -1,4 +1,5 @@
 resource "aws_ecr_repository" "main" {
+  # checkov:skip=CKV_AWS_136:Images are encrypted at rest with AES-256; switching an existing repository to KMS forces replacement.
   name                 = local.name
   image_tag_mutability = "IMMUTABLE"
 

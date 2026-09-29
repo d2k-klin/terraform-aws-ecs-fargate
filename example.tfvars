@@ -25,6 +25,12 @@ create_cdn        = false
 create_efs        = false
 create_postgresql = false
 
+# Compliance baseline. These are the defaults; see docs/COMPLIANCE.md.
+log_retention_days  = 365
+enable_flow_log     = true
+deletion_protection = true
+db_multi_az         = false # true for production
+
 tags = {
   Owner      = "platform-team"
   CostCenter = "engineering"

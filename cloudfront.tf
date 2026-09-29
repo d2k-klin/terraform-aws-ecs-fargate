@@ -1,11 +1,13 @@
 module "cdn" {
+  # checkov:skip=CKV_TF_1:Registry module pinned to an exact version; Dependabot proposes reviewed updates.
   source  = "terraform-aws-modules/cloudfront/aws"
-  version = "6.7.0"
+  version = "6.7.1"
 
   create              = var.create_cdn
   price_class         = var.cloudfront_price_class
   retain_on_delete    = false
   wait_for_deployment = false
+  web_acl_id          = var.cloudfront_web_acl_arn
 
   vpc_origin = var.create_cdn ? {
     alb = {
@@ -41,6 +43,9 @@ module "cdn" {
     query_string         = true
     headers              = ["*"]
     cookies_forward      = "all"
+
+    # HSTS, X-Content-Type-Options, X-Frame-Options, Referrer-Policy.
+    response_headers_policy_name = "Managed-SecurityHeadersPolicy"
 
     min_ttl     = 0
     default_ttl = 0

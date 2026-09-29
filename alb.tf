@@ -1,11 +1,14 @@
 module "alb_ecs" {
+  # checkov:skip=CKV_TF_1:Registry module pinned to an exact version; Dependabot proposes reviewed updates.
   source  = "terraform-aws-modules/alb/aws"
-  version = "10.5.0"
+  version = "10.5.1"
 
   name = local.name
 
   load_balancer_type = "application"
   internal           = var.create_cdn
+
+  enable_deletion_protection = var.deletion_protection
 
   vpc_id  = module.vpc.vpc_id
   subnets = var.create_cdn ? module.vpc.private_subnets : module.vpc.public_subnets

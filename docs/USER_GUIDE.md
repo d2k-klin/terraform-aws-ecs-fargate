@@ -322,6 +322,10 @@ The database is reachable only from the ECS task security group. Enabling RDS
 does not automatically inject connection settings into the container; wire the
 managed secret or application-specific credentials through `container_secrets`.
 
+RDS rotates the managed master password automatically. ECS reads secrets only
+when a task starts, so give the application its own database user (or IAM
+authentication, which is enabled) rather than the master credentials.
+
 ## 8. Configure remote Terraform state
 
 Local state is acceptable for a throwaway experiment. Teams and durable
@@ -372,17 +376,23 @@ use_fargate_spot         = false
 service_desired_count    = 2
 autoscaling_min_capacity = 2
 autoscaling_max_capacity = 10
-log_retention_days       = 90
 create_cdn               = true
+db_multi_az              = true
+deletion_protection      = true
 ```
+
+The defaults already keep logs for 365 days, enable VPC flow logs, protect the
+ALB and RDS from deletion, and add CloudFront security headers. See the
+[compliance guide](COMPLIANCE.md) for the framework mapping and remaining
+account-level controls.
 
 Then add the controls appropriate to your organization:
 
 - HTTPS and DNS
 - remote state, CI plan/apply approvals, and separate AWS accounts
 - CloudWatch alarms, dashboards, and centralized logs
-- AWS WAF or another edge protection layer
-- RDS Multi-AZ, deletion protection, and tested restore procedures
+- AWS WAF (`cloudfront_web_acl_arn`) or another edge protection layer
+- tested RDS restore procedures
 - multiple NAT Gateways or VPC endpoints according to availability and cost
 - Fargate on-demand capacity for workloads that cannot tolerate interruption
 - narrowly scoped task and deployment IAM policies
@@ -469,7 +479,11 @@ state files.
 
 ## 12. Clean up
 
+Deletion protection is on by default. Turn it off first; with it off, RDS is
+also deleted without a final snapshot:
+
 ```bash
+terraform apply -var deletion_protection=false
 terraform plan -destroy -out=destroy.plan
 terraform apply destroy.plan
 ```

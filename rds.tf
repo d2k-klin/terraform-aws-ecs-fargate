@@ -1,6 +1,7 @@
 module "db_dev" {
+  # checkov:skip=CKV_TF_1:Registry module pinned to an exact version; Dependabot proposes reviewed updates.
   source  = "terraform-aws-modules/rds/aws"
-  version = "7.2.0"
+  version = "7.2.2"
 
   create_db_instance = var.create_postgresql
   identifier         = "${local.name}-db"
@@ -24,11 +25,19 @@ module "db_dev" {
   subnet_ids             = module.vpc.database_subnets
   vpc_security_group_ids = [module.rds_sg.id]
 
+  multi_az                            = var.db_multi_az
+  deletion_protection                 = var.deletion_protection
+  iam_database_authentication_enabled = true
+
+  enabled_cloudwatch_logs_exports        = ["postgresql", "upgrade"]
+  create_cloudwatch_log_group            = true
+  cloudwatch_log_group_retention_in_days = var.log_retention_days
+
   maintenance_window = "Mon:00:00-Mon:03:00"
   backup_window      = "03:00-06:00"
 
   backup_retention_period = var.db_backup_retention_days
-  skip_final_snapshot     = true
+  skip_final_snapshot     = !var.deletion_protection
 
   tags = local.tags
 }
