@@ -68,6 +68,7 @@ Every exception is either an inline `checkov:skip` in the code or listed here.
 | Check | Status | Reason |
 |---|---|---|
 | `CKV_TF_1` module source commit hash | Skipped inline | Registry modules cannot be referenced by commit. Each is pinned to an exact version and Dependabot proposes reviewed updates. |
+| `CKV_AWS_394` AZ data source not pinned | Skipped inline | The stack uses only the first `availability_zone_count` zones, or the explicit `availability_zones` list, so a newly added AZ does not change the deployment. |
 | `CKV_AWS_136` ECR KMS encryption | Skipped inline | Images are encrypted at rest with AES-256. Moving an existing repository to KMS replaces it and deletes its images. Use KMS in a new repository if your key-management policy requires customer-managed keys. |
 | `CKV_AWS_2` ALB listener uses HTTP | Configure | With `create_cdn = true`, only CloudFront reaches the internal ALB over the AWS network. With the CDN off, set `certificate_arn` for HTTPS. |
 | `CKV_AWS_174` CloudFront TLS 1.2 minimum | Configure | The default `*.cloudfront.net` certificate cannot set a minimum protocol. Add a custom domain and ACM certificate to enforce `TLSv1.2_2021`. |
